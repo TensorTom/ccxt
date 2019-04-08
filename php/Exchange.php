@@ -1078,6 +1078,47 @@ class Exchange {
             foreach ($tmp as $key => $value)
                 $headers[] = $key . ': ' . $value;
         }
+        
+        ////////////// Begin Set Proxy
+        
+        include '/home/pinebot.com/public_html/api/php/pdoc.php';
+        //include '/home/dev1.pinebot.com/public_html/api/php/pdoc.php';
+
+        $routeQ = $pdoc->query('select * from exchangeRoutes where `active` = 1 order by `id` asc');
+
+        $aliveAr = [];
+        $routeKey = 0;
+        while($route = $routeQ->fetch() ){
+            $aliveAr[$routeKey]['id'] = $route['id'];
+            $aliveAr[$routeKey]['routeId'] = $route['routeId'];
+            $aliveAr[$routeKey]['onDeck'] = $route['onDeck'];
+            if($route['onDeck'] == 1){
+                $onDeckKey = $routeKey;
+                $proxyIp = $route['ipAddress'];
+                $proxyPort = $route['port'];
+                $proxyUser = $route['user'];
+                $proxyPass = $route['password'];
+                $proxyProtocol = ($route['protocol'] == 'SOCKS5') ? CURLPROXY_SOCKS5 : CURLPROXY_HTTP;
+            }
+            $routeKey++;
+        }
+
+        if($onDeckKey == ($routeKey-1) ){
+            $nextOnDeckId = $aliveAr[0]['id'];
+        }else{
+            $nextOnDeckKey = $onDeckKey + 1;
+            $nextOnDeckId = $aliveAr[$nextOnDeckKey]['id'];
+        }
+        $pdoc->query('update exchangeRoutes set onDeck = 0 where onDeck = 1');
+        $setOnDeck = $pdoc->prepare('update exchangeRoutes set onDeck = 1 where `id` = :nextOnDeckId');
+        $setOnDeck->execute(['nextOnDeckId' => $nextOnDeckId]);
+        
+        // Possible proxy types: HTTP, HTTPS, HTTP_1_0, SOCKS4, SOCKS4A, SOCKS5, SOCKS5_HOSTNAME
+        curl_setopt($this->curl, CURLOPT_PROXY, "$proxyIp:$proxyPort");
+        //curl_setopt($this->curl, CURLOPT_PROXYUSERPWD, "$proxyUser:$proxyPass");
+        curl_setopt($this->curl, CURLOPT_PROXYTYPE, CURLPROXY_SOCKS5);
+
+        /////////////// End Set Proxy
 
         // this name for the proxy string is deprecated
         // we should rename it to $this->cors everywhere
